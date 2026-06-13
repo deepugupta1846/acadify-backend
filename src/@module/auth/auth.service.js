@@ -205,7 +205,100 @@ const logoutUser = async (userId) => {
   return true;
 };
 
-const getProfile = async (userId) => User.findByPk(userId);
+const getProfile = async (userId) =>
+  User.findByPk(userId, {
+    include: [
+      {
+        model: Academy,
+        as: 'academy',
+        attributes: [
+          'id',
+          'name',
+          'slug',
+          'email',
+          'phone',
+          'address',
+          'city',
+          'state',
+          'country',
+          'postalCode',
+          'website',
+          'description',
+          'status'
+        ]
+      }
+    ]
+  });
+
+const updateProfile = async (userId, payload) => {
+  const user = await User.findByPk(userId);
+
+  if (!user) {
+    const error = new Error('User not found');
+    error.status = 404;
+    throw error;
+  }
+
+  const updates = {};
+
+  if (payload.name !== undefined) {
+    const trimmedName = payload.name.trim();
+    if (!trimmedName) {
+      const error = new Error('Name is required');
+      error.status = 400;
+      throw error;
+    }
+    updates.name = trimmedName;
+  }
+
+  if (payload.phone !== undefined) {
+    updates.phone = payload.phone?.trim() || null;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    const error = new Error('No profile fields provided to update');
+    error.status = 400;
+    throw error;
+  }
+
+  await user.update(updates);
+  return getProfile(userId);
+};
+
+const changePassword = async (userId, { currentPassword, newPassword }) => {
+  const user = await User.scope('withPassword').findByPk(userId);
+
+  if (!user) {
+    const error = new Error('User not found');
+    error.status = 404;
+    throw error;
+  }
+
+  if (!currentPassword) {
+    const error = new Error('Current password is required');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!newPassword || newPassword.length < 6) {
+    const error = new Error('New password must be at least 6 characters');
+    error.status = 400;
+    throw error;
+  }
+
+  const isValid = await comparePassword(currentPassword, user.password);
+
+  if (!isValid) {
+    const error = new Error('Current password is incorrect');
+    error.status = 400;
+    throw error;
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+  await user.update({ password: hashedPassword });
+
+  return true;
+};
 
 module.exports = {
   registerUser,
@@ -213,6 +306,8 @@ module.exports = {
   refreshSession,
   logoutUser,
   getProfile,
+  updateProfile,
+  changePassword,
   issueAuthTokens,
   USER_TYPES
 };

@@ -49,6 +49,41 @@ const formatAuthData = (user, tokens) => ({
   }
 });
 
+const formatProfileUser = (user) => {
+  const json = user?.toJSON ? user.toJSON() : user;
+  const academy = json.academy
+    ? {
+        id: json.academy.id,
+        name: json.academy.name,
+        slug: json.academy.slug,
+        email: json.academy.email,
+        phone: json.academy.phone,
+        address: json.academy.address,
+        city: json.academy.city,
+        state: json.academy.state,
+        country: json.academy.country,
+        postalCode: json.academy.postalCode,
+        website: json.academy.website,
+        description: json.academy.description,
+        status: json.academy.status
+      }
+    : null;
+
+  return {
+    id: json.id,
+    email: json.email,
+    name: json.name,
+    type: json.type,
+    phone: json.phone,
+    academyId: json.academyId,
+    isActive: json.isActive,
+    lastLoginAt: json.lastLoginAt,
+    createdAt: json.createdAt,
+    updatedAt: json.updatedAt,
+    academy
+  };
+};
+
 const validateStudentRegisterBody = (body) => {
   const required = ['email', 'password', 'name', 'academyId'];
   const missing = required.filter((field) => {
@@ -179,7 +214,54 @@ const profile = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: { user }
+      data: { user: formatProfileUser(user) }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const updateProfile = async (req, res, next) => {
+  try {
+    const user = await authService.updateProfile(req.user.id, {
+      name: req.body.name,
+      phone: req.body.phone
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: { user: formatProfileUser(user) }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword?.trim()) {
+      const error = new Error('Current password is required');
+      error.status = 400;
+      throw error;
+    }
+
+    if (!newPassword?.trim()) {
+      const error = new Error('New password is required');
+      error.status = 400;
+      throw error;
+    }
+
+    await authService.changePassword(req.user.id, {
+      currentPassword,
+      newPassword
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
     });
   } catch (error) {
     return next(error);
@@ -192,5 +274,7 @@ module.exports = {
   login,
   refresh,
   logout,
-  profile
+  profile,
+  updateProfile,
+  changePassword
 };
