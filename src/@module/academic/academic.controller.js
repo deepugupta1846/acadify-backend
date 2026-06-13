@@ -23,7 +23,7 @@ const registerAcademy = async (req, res, next) => {
   try {
     validateRegistrationBody(req.body);
 
-    const academy = await academicService.registerAcademy({
+    const result = await academicService.registerAcademy({
       name: req.body.name.trim(),
       email: req.body.email.trim().toLowerCase(),
       phone: req.body.phone.trim(),
@@ -36,9 +36,14 @@ const registerAcademy = async (req, res, next) => {
       website: req.body.website?.trim()
     });
 
+    const { academy, emailSent, emailError, adminEmailSent, adminEmailError } =
+      result;
+
     return res.status(201).json({
       success: true,
-      message: 'Academy registration submitted successfully',
+      message: emailSent
+        ? 'Academy registration submitted. A confirmation email has been sent.'
+        : 'Academy registration submitted successfully',
       data: {
         id: academy.id,
         name: academy.name,
@@ -46,7 +51,11 @@ const registerAcademy = async (req, res, next) => {
         email: academy.email,
         status: academy.status,
         createdAt: academy.createdAt
-      }
+      },
+      emailSent,
+      emailError,
+      adminEmailSent,
+      adminEmailError
     });
   } catch (error) {
     return next(error);

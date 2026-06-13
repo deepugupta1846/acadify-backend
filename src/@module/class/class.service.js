@@ -5,10 +5,14 @@ const livekitService = require('../livekit/livekit.service');
 const recordingService = require('./recording.service');
 const sessionService = require('./session.service');
 const attendanceService = require('./attendance.service');
+const {
+  sendLiveClassStartedEmailsToStudents
+} = require('../email/email.service');
 
 const Classroom = db.classroom;
 const ClassEnrollment = db.classEnrollment;
 const Course = db.course;
+const User = db.user;
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -245,6 +249,29 @@ const getLiveClassAccess = async (id, user) => {
   return { classroom: plain, livekit };
 };
 
+const getEnrolledStudentsForClass = async (classId) => {
+  const enrollments = await ClassEnrollment.findAll({
+    where: { classId },
+    include: [
+      {
+        model: User,
+        as: 'student',
+        attributes: ['id', 'email', 'name', 'isActive'],
+        required: true
+      }
+    ]
+  });
+
+  return enrollments
+    .map((item) => item.student)
+    .filter((student) => student?.isActive && student?.email);
+};
+
+const notifyEnrolledStudentsLiveStarted = async (classroom) => {
+  const students = await getEnrolledStudentsForClass(classroom.id);
+  return sendLiveClassStartedEmailsToStudents(classroom, students);
+};
+
 const startLiveClass = async (id, user) => {
   const classroom = await getClassById(id, user);
 
@@ -272,7 +299,19 @@ const startLiveClass = async (id, user) => {
     'host'
   );
 
-  return { classroom: updated, livekit };
+  let studentNotifications = { sent: 0, failed: 0, errors: [] };
+
+  try {
+    studentNotifications = await notifyEnrolledStudentsLiveStarted(updated);
+  } catch (error) {
+    studentNotifications = {
+      sent: 0,
+      failed: 0,
+      errors: [error.message || 'Failed to notify enrolled students']
+    };
+  }
+
+  return { classroom: updated, livekit, studentNotifications };
 };
 
 const endLiveClass = async (id, user) => {

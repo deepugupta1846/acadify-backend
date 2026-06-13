@@ -1,5 +1,11 @@
 const db = require('../../connection');
 const { provisionAcademicUser } = require('./academic.credentials');
+const {
+  sendAcademyRegistrationPendingEmail,
+  sendAdminNewAcademyRegistrationEmail,
+  sendAcademyStatusEmail,
+  sendAcademyCredentialsEmail
+} = require('../email/email.service');
 
 const Academy = db.academy;
 
@@ -40,7 +46,7 @@ const registerAcademy = async (payload) => {
 
   const slug = await buildUniqueSlug(payload.name);
 
-  return Academy.create({
+  const academy = await Academy.create({
     name: payload.name,
     slug,
     email: payload.email,
@@ -54,6 +60,29 @@ const registerAcademy = async (payload) => {
     website: payload.website || null,
     status: 'pending'
   });
+
+  let emailSent = false;
+  let emailError = null;
+  let adminEmailSent = false;
+  let adminEmailError = null;
+
+  try {
+    await sendAcademyRegistrationPendingEmail(academy);
+    emailSent = true;
+  } catch (error) {
+    emailError = error.message || 'Failed to send registration email';
+  }
+
+  try {
+    const adminResult = await sendAdminNewAcademyRegistrationEmail(academy);
+    if (adminResult !== null) {
+      adminEmailSent = true;
+    }
+  } catch (error) {
+    adminEmailError = error.message || 'Failed to send admin notification email';
+  }
+
+  return { academy, emailSent, emailError, adminEmailSent, adminEmailError };
 };
 
 const getAcademyById = async (id) => {
@@ -108,12 +137,40 @@ const updateAcademy = async (id, payload) => {
   await academy.reload();
 
   let academicCredentials = null;
+  let emailSent = false;
+  let emailError = null;
 
   if (academy.status === 'active' && previousStatus !== 'active') {
     academicCredentials = await provisionAcademicUser(academy);
   }
 
-  return { academy, academicCredentials };
+  if (academy.status !== previousStatus) {
+    try {
+      await sendAcademyStatusEmail(academy, previousStatus, academy.status);
+      emailSent = true;
+    } catch (error) {
+      emailError = error.message || 'Failed to send status email';
+    }
+  }
+
+  return { academy, academicCredentials, emailSent, emailError };
+};
+
+const sendAcademyCredentials = async (id) => {
+  const academy = await getAcademyById(id);
+
+  if (academy.status !== 'active') {
+    const error = new Error(
+      'Academy must be active before sending login credentials'
+    );
+    error.status = 400;
+    throw error;
+  }
+
+  const credentials = await provisionAcademicUser(academy);
+  await sendAcademyCredentialsEmail(academy, credentials);
+
+  return { academy, credentials };
 };
 
 const deleteAcademy = async (id) => {
@@ -136,6 +193,7 @@ module.exports = {
   registerAcademy,
   getAcademyById,
   updateAcademy,
+  sendAcademyCredentials,
   deleteAcademy,
   listPublicAcademies
 };

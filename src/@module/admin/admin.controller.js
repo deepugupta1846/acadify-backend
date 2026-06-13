@@ -60,13 +60,17 @@ const updateAcademy = async (req, res, next) => {
 
     const message = result.academicCredentials
       ? 'Academy activated. Default academic login credentials created.'
-      : 'Academy updated successfully';
+      : result.emailSent
+        ? 'Academy updated and status email sent.'
+        : 'Academy updated successfully';
 
     return res.status(200).json({
       success: true,
       message,
       data: result.academy,
-      academicCredentials: result.academicCredentials || null
+      academicCredentials: result.academicCredentials || null,
+      emailSent: result.emailSent || false,
+      emailError: result.emailError || null
     });
   } catch (error) {
     return next(error);
@@ -86,10 +90,26 @@ const deleteAcademy = async (req, res, next) => {
   }
 };
 
+const sendAcademyCredentials = async (req, res, next) => {
+  try {
+    const result = await adminService.sendAcademyCredentials(req.params.id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Academy credentials emailed successfully',
+      data: result.academy,
+      academicCredentials: result.credentials
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   getStats,
   getAcademies,
   getAcademyById,
   updateAcademy,
+  sendAcademyCredentials,
   deleteAcademy
 };

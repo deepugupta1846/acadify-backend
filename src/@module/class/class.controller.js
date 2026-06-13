@@ -138,12 +138,17 @@ const getLiveToken = async (req, res, next) => {
 const startLiveClass = async (req, res, next) => {
   try {
     const result = await classService.startLiveClass(req.params.id, req.user);
+    const { sent = 0 } = result.studentNotifications || {};
 
     return res.status(200).json({
       success: true,
-      message: 'Live class started',
+      message:
+        sent > 0
+          ? `Live class started. ${sent} enrolled student(s) notified by email.`
+          : 'Live class started',
       data: result.classroom,
-      livekit: result.livekit
+      livekit: result.livekit,
+      studentNotifications: result.studentNotifications
     });
   } catch (error) {
     return next(error);

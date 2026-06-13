@@ -42,6 +42,9 @@ const getAcademyById = (id) => academicService.getAcademyById(id);
 
 const updateAcademy = (id, payload) => academicService.updateAcademy(id, payload);
 
+const sendAcademyCredentials = (id) =>
+  academicService.sendAcademyCredentials(id);
+
 const deleteAcademy = (id) => academicService.deleteAcademy(id);
 
 module.exports = {
@@ -49,5 +52,6 @@ module.exports = {
   listAcademies,
   getAcademyById,
   updateAcademy,
+  sendAcademyCredentials,
   deleteAcademy
 };

@@ -11,6 +11,10 @@ router.get('/stats', adminController.getStats);
 router.get('/academies', adminController.getAcademies);
 router.get('/academies/:id', adminController.getAcademyById);
 router.put('/academies/:id', adminController.updateAcademy);
+router.post(
+  '/academies/:id/send-credentials',
+  adminController.sendAcademyCredentials
+);
 router.delete('/academies/:id', adminController.deleteAcademy);
 
 module.exports = router;
