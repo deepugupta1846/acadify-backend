@@ -268,6 +268,62 @@ const changePassword = async (req, res, next) => {
   }
 };
 
+const sendPasswordResetOtp = async (req, res, next) => {
+  try {
+    const email = req.body.email?.trim();
+
+    if (!email) {
+      const error = new Error('Email is required');
+      error.status = 400;
+      throw error;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const error = new Error('Enter a valid email address');
+      error.status = 400;
+      throw error;
+    }
+
+    const result = await authService.sendPasswordResetOtp(email);
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: {
+        expiresInMinutes: result.expiresInMinutes || null
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const resetPasswordWithOtp = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword, confirmPassword } = req.body;
+
+    if (!email?.trim()) {
+      const error = new Error('Email is required');
+      error.status = 400;
+      throw error;
+    }
+
+    await authService.resetPasswordWithOtp({
+      email,
+      otp,
+      newPassword,
+      confirmPassword
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully. You can now log in with your new password.'
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   register,
   registerStudent,
@@ -276,5 +332,7 @@ module.exports = {
   logout,
   profile,
   updateProfile,
-  changePassword
+  changePassword,
+  sendPasswordResetOtp,
+  resetPasswordWithOtp
 };

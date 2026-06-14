@@ -18,6 +18,10 @@ db.sequelize = sequelize;
 db.academy = require('../@module/academic/academic.model')(sequelize, DataTypes);
 db.user = require('../@module/auth/user.model')(sequelize, DataTypes);
 db.authToken = require('../@module/auth/token.model')(sequelize, DataTypes);
+db.passwordResetOtp = require('../@module/auth/password-reset-otp.model')(
+  sequelize,
+  DataTypes
+);
 db.course = require('../@module/course/course.model')(sequelize, DataTypes);
 db.classroom = require('../@module/class/class.model')(sequelize, DataTypes);
 db.classEnrollment = require('../@module/class/class-enrollment.model')(
@@ -160,5 +164,11 @@ db.classSessionAssignment.belongsTo(db.user, {
 
 db.user.hasMany(db.authToken, { foreignKey: 'user_id', as: 'tokens' });
 db.authToken.belongsTo(db.user, { foreignKey: 'user_id', as: 'user' });
+
+db.user.hasMany(db.passwordResetOtp, {
+  foreignKey: 'user_id',
+  as: 'passwordResetOtps'
+});
+db.passwordResetOtp.belongsTo(db.user, { foreignKey: 'user_id', as: 'user' });
 
 module.exports = db;
