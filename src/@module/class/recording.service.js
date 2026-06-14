@@ -199,7 +199,8 @@ const startRecording = async (classId, user) => {
 
   const { egressId, filePath } = await livekitService.startRoomRecording({
     roomName: classroom.livekitRoomName,
-    classId
+    classId,
+    hostIdentity: `${USER_TYPES.ACADEMIC}-${user.id}`
   });
 
   const recording = await ClassRecording.create({

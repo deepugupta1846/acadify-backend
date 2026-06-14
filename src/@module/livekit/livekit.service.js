@@ -4,12 +4,17 @@ const {
   EgressClient,
   EncodedFileOutput,
   EncodedFileType,
-  AzureBlobUpload
+  AzureBlobUpload,
+  TrackSource,
+  EncodingOptionsPreset
 } = require('livekit-server-sdk');
 const config = require('./livekit.config');
 const azureConfig = require('../storage/azure.config');
+const { USER_TYPES } = require('../auth/auth.constants');
 
 const TOKEN_TTL = '4h';
+const SCREEN_SHARE_SOURCE =
+  TrackSource?.SCREEN_SHARE !== undefined ? TrackSource.SCREEN_SHARE : 3;
 
 const ensureConfigured = () => {
   if (!config.url || !config.apiKey || !config.apiSecret) {
@@ -46,31 +51,89 @@ const ensureAzureConfigured = () => {
   }
 };
 
-const startRoomRecording = async ({ roomName, classId }) => {
+const buildEncodedFileOutput = (classId) => {
+  const filePath = `recordings/class-${classId}/${Date.now()}.mp4`;
+
+  return {
+    filePath,
+    output: new EncodedFileOutput({
+      fileType: EncodedFileType.MP4,
+      filepath: filePath,
+      output: {
+        case: 'azure',
+        value: new AzureBlobUpload({
+          accountName: azureConfig.accountName,
+          accountKey: azureConfig.accountKey,
+          containerName: azureConfig.containerName
+        })
+      }
+    })
+  };
+};
+
+const resolveHostIdentity = async (roomName, preferredHostIdentity) => {
+  const roomService = getRoomService();
+  const participants = await roomService.listParticipants(roomName);
+
+  if (preferredHostIdentity) {
+    const preferred = participants.find(
+      (participant) => participant.identity === preferredHostIdentity
+    );
+    if (preferred) return preferredHostIdentity;
+  }
+
+  const academicParticipant = participants.find((participant) =>
+    participant.identity?.startsWith(`${USER_TYPES.ACADEMIC}-`)
+  );
+
+  return academicParticipant?.identity || null;
+};
+
+const hostIsSharingScreen = async (roomName, hostIdentity) => {
+  const roomService = getRoomService();
+  const participant = await roomService.getParticipant(roomName, hostIdentity);
+  const tracks = participant?.tracks || [];
+
+  return tracks.some((track) => track.source === SCREEN_SHARE_SOURCE);
+};
+
+const startHostRecording = async ({ roomName, classId, hostIdentity }) => {
   ensureAzureConfigured();
 
-  const filePath = `recordings/class-${classId}/${Date.now()}.mp4`;
-  const output = new EncodedFileOutput({
-    fileType: EncodedFileType.MP4,
-    filepath: filePath,
-    output: {
-      case: 'azure',
-      value: new AzureBlobUpload({
-        accountName: azureConfig.accountName,
-        accountKey: azureConfig.accountKey,
-        containerName: azureConfig.containerName
-      })
-    }
-  });
+  const resolvedHostIdentity = await resolveHostIdentity(roomName, hostIdentity);
 
+  if (!resolvedHostIdentity) {
+    const error = new Error(
+      'Host must join the live class before recording can start'
+    );
+    error.status = 400;
+    throw error;
+  }
+
+  const { filePath, output } = buildEncodedFileOutput(classId);
   const egressClient = getEgressClient();
-  const egress = await egressClient.startRoomCompositeEgress(roomName, output);
+  const screenShare = await hostIsSharingScreen(roomName, resolvedHostIdentity);
+
+  const egress = await egressClient.startParticipantEgress(
+    roomName,
+    resolvedHostIdentity,
+    { file: output },
+    {
+      screenShare,
+      encodingOptions: EncodingOptionsPreset.H264_1080P_30
+    }
+  );
 
   return {
     egressId: egress.egressId,
-    filePath
+    filePath,
+    hostIdentity: resolvedHostIdentity,
+    captureMode: screenShare ? 'screen_share' : 'camera'
   };
 };
+
+const startRoomRecording = async ({ roomName, classId, hostIdentity }) =>
+  startHostRecording({ roomName, classId, hostIdentity });
 
 const stopRoomRecording = async (egressId) => {
   const egressClient = getEgressClient();
@@ -153,6 +216,7 @@ module.exports = {
   ensureRoom,
   deleteRoom,
   buildLiveKitPayload,
+  startHostRecording,
   startRoomRecording,
   stopRoomRecording,
   getEgressInfo,

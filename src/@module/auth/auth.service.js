@@ -7,10 +7,16 @@ const { JWT_SECRET } = require('./auth.middleware');
 
 const User = db.user;
 const AuthToken = db.authToken;
+const PasswordResetOtp = db.passwordResetOtp;
 const Academy = db.academy;
+const emailService = require('../email/email.service');
 
-const ACCESS_TOKEN_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
+const ACCESS_TOKEN_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '7d';
 const REFRESH_TOKEN_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
+const OTP_EXPIRY_MINUTES = Number(process.env.PASSWORD_RESET_OTP_EXPIRY_MINUTES || 10);
+const OTP_RESEND_COOLDOWN_SECONDS = Number(
+  process.env.PASSWORD_RESET_OTP_COOLDOWN_SECONDS || 60
+);
 
 const parseExpiryToDate = (expiry) => {
   const match = expiry.match(/^(\d+)([dhms])$/);
@@ -300,6 +306,141 @@ const changePassword = async (userId, { currentPassword, newPassword }) => {
   return true;
 };
 
+const generateOtp = () => String(crypto.randomInt(100000, 1000000));
+
+const sendPasswordResetOtp = async (email) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ where: { email: normalizedEmail } });
+
+  if (!user) {
+    const error = new Error('No account found with this email address');
+    error.status = 404;
+    throw error;
+  }
+
+  if (!user.isActive) {
+    const error = new Error('Your account is inactive. Contact support.');
+    error.status = 403;
+    throw error;
+  }
+
+  const recentOtp = await PasswordResetOtp.findOne({
+    where: { userId: user.id, usedAt: null },
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (recentOtp) {
+    const cooldownEndsAt =
+      new Date(recentOtp.createdAt).getTime() + OTP_RESEND_COOLDOWN_SECONDS * 1000;
+
+    if (Date.now() < cooldownEndsAt) {
+      const error = new Error(
+        `Please wait ${OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting a new code`
+      );
+      error.status = 429;
+      throw error;
+    }
+  }
+
+  await PasswordResetOtp.update(
+    { usedAt: new Date() },
+    { where: { userId: user.id, usedAt: null } }
+  );
+
+  const otp = generateOtp();
+  const otpHash = await hashPassword(otp);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+  await PasswordResetOtp.create({
+    userId: user.id,
+    otpHash,
+    expiresAt
+  });
+
+  await emailService.sendPasswordResetOtpEmail(user, otp, OTP_EXPIRY_MINUTES);
+
+  return {
+    sent: true,
+    message: 'Verification code sent to your email.',
+    expiresInMinutes: OTP_EXPIRY_MINUTES
+  };
+};
+
+const resetPasswordWithOtp = async ({
+  email,
+  otp,
+  newPassword,
+  confirmPassword
+}) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (!otp?.trim()) {
+    const error = new Error('Verification code is required');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!newPassword?.trim()) {
+    const error = new Error('New password is required');
+    error.status = 400;
+    throw error;
+  }
+
+  if (newPassword.length < 6) {
+    const error = new Error('New password must be at least 6 characters');
+    error.status = 400;
+    throw error;
+  }
+
+  if (newPassword !== confirmPassword) {
+    const error = new Error('Passwords do not match');
+    error.status = 400;
+    throw error;
+  }
+
+  const user = await User.scope('withPassword').findOne({
+    where: { email: normalizedEmail }
+  });
+
+  if (!user) {
+    const error = new Error('No account found with this email address');
+    error.status = 404;
+    throw error;
+  }
+
+  if (!user.isActive) {
+    const error = new Error('Your account is inactive. Contact support.');
+    error.status = 403;
+    throw error;
+  }
+
+  const storedOtp = await PasswordResetOtp.findOne({
+    where: { userId: user.id, usedAt: null },
+    order: [['createdAt', 'DESC']]
+  });
+
+  if (!storedOtp || new Date(storedOtp.expiresAt) < new Date()) {
+    const error = new Error('Verification code has expired. Request a new one.');
+    error.status = 400;
+    throw error;
+  }
+
+  const otpValid = await comparePassword(String(otp).trim(), storedOtp.otpHash);
+
+  if (!otpValid) {
+    const error = new Error('Invalid verification code');
+    error.status = 400;
+    throw error;
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+  await user.update({ password: hashedPassword });
+  await storedOtp.update({ usedAt: new Date() });
+  await revokeUserTokens(user.id);
+
+  return true;
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -308,6 +449,8 @@ module.exports = {
   getProfile,
   updateProfile,
   changePassword,
+  sendPasswordResetOtp,
+  resetPasswordWithOtp,
   issueAuthTokens,
   USER_TYPES
 };

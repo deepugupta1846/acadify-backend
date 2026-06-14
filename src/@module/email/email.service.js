@@ -279,6 +279,27 @@ const sendLiveClassStartedEmail = async (student, classroom) => {
   });
 };
 
+const sendPasswordResetOtpEmail = async (user, otp, expiresInMinutes = 10) => {
+  const bodyHtml = `
+    <p>Hello ${escapeHtml(user.name)},</p>
+    <p>We received a request to reset your Acadify password.</p>
+    <p>Use the verification code below to set a new password. This code expires in <strong>${expiresInMinutes} minutes</strong>.</p>
+    <p style="margin:24px 0;text-align:center;">
+      <span style="display:inline-block;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:16px 28px;font-size:28px;font-weight:700;letter-spacing:0.35em;color:#0056d2;">
+        ${escapeHtml(otp)}
+      </span>
+    </p>
+    <p>If you did not request a password reset, you can safely ignore this email. Your password will stay the same.</p>
+  `;
+
+  return sendEmail({
+    to: user.email,
+    subject: 'Your Acadify password reset code',
+    html: layout({ title: 'Password reset verification', bodyHtml }),
+    text: `Hello ${user.name},\n\nYour Acadify password reset code is: ${otp}\n\nThis code expires in ${expiresInMinutes} minutes.\n\nIf you did not request this, ignore this email.`
+  });
+};
+
 const sendLiveClassStartedEmailsToStudents = async (classroom, students) => {
   if (!students?.length) {
     return { sent: 0, failed: 0, errors: [] };
@@ -321,6 +342,7 @@ module.exports = {
   sendAdminNewAcademyRegistrationEmail,
   sendAcademyStatusEmail,
   sendAcademyCredentialsEmail,
+  sendPasswordResetOtpEmail,
   sendLiveClassStartedEmailsToStudents,
   isEmailConfigured: emailConfig.isConfigured
 };
