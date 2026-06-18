@@ -74,9 +74,9 @@ const validateUserTypeRules = async ({ type, academyId }) => {
     throw error;
   }
 
-  if ([USER_TYPES.ACADEMIC, USER_TYPES.STUDENT, USER_TYPES.TEACHER].includes(type)) {
+  if ([USER_TYPES.ACADEMIC, USER_TYPES.TEACHER].includes(type)) {
     if (!academyId) {
-      const error = new Error('academyId is required for academic, student, and teacher accounts');
+      const error = new Error('academyId is required for academic and teacher accounts');
       error.status = 400;
       throw error;
     }
@@ -87,8 +87,17 @@ const validateUserTypeRules = async ({ type, academyId }) => {
       error.status = 404;
       throw error;
     }
+  }
 
-    if (type === USER_TYPES.STUDENT && academy.status !== 'active') {
+  if (type === USER_TYPES.STUDENT && academyId) {
+    const academy = await Academy.findByPk(academyId);
+    if (!academy) {
+      const error = new Error('Academy not found');
+      error.status = 404;
+      throw error;
+    }
+
+    if (academy.status !== 'active') {
       const error = new Error(
         'Selected academy is not active. Choose an approved academy.'
       );

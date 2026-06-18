@@ -23,6 +23,10 @@ db.passwordResetOtp = require('../@module/auth/password-reset-otp.model')(
   DataTypes
 );
 db.course = require('../@module/course/course.model')(sequelize, DataTypes);
+db.courseContent = require('../@module/course/course-content.model')(
+  sequelize,
+  DataTypes
+);
 db.classroom = require('../@module/class/class.model')(sequelize, DataTypes);
 db.classEnrollment = require('../@module/class/class-enrollment.model')(
   sequelize,
@@ -57,6 +61,27 @@ db.course.belongsTo(db.academy, { foreignKey: 'academy_id', as: 'academy' });
 
 db.user.hasMany(db.course, { foreignKey: 'created_by', as: 'createdCourses' });
 db.course.belongsTo(db.user, { foreignKey: 'created_by', as: 'creator' });
+
+db.course.hasMany(db.courseContent, { foreignKey: 'course_id', as: 'contents' });
+db.courseContent.belongsTo(db.course, { foreignKey: 'course_id', as: 'course' });
+
+db.academy.hasMany(db.courseContent, {
+  foreignKey: 'academy_id',
+  as: 'courseContents'
+});
+db.courseContent.belongsTo(db.academy, {
+  foreignKey: 'academy_id',
+  as: 'academy'
+});
+
+db.user.hasMany(db.courseContent, {
+  foreignKey: 'created_by',
+  as: 'createdCourseContents'
+});
+db.courseContent.belongsTo(db.user, {
+  foreignKey: 'created_by',
+  as: 'creator'
+});
 
 db.academy.hasMany(db.classroom, { foreignKey: 'academy_id', as: 'classes' });
 db.classroom.belongsTo(db.academy, { foreignKey: 'academy_id', as: 'academy' });

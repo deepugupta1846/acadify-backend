@@ -1,6 +1,7 @@
 const db = require('../../connection');
 
 const Course = db.course;
+const Classroom = db.classroom;
 
 const slugify = (value) =>
   value
@@ -54,7 +55,23 @@ const listCourses = async (user) => {
 const getCourseById = async (id, user) => {
   const academyId = ensureAcademyAccess(user);
   const course = await Course.findOne({
-    where: { id, academyId }
+    where: { id, academyId },
+    include: [
+      {
+        model: Classroom,
+        as: 'classes',
+        attributes: [
+          'id',
+          'name',
+          'classCode',
+          'status',
+          'classTime',
+          'durationMinutes',
+          'isLive',
+          'createdAt'
+        ]
+      }
+    ]
   });
 
   if (!course) {
@@ -63,7 +80,14 @@ const getCourseById = async (id, user) => {
     throw error;
   }
 
-  return course;
+  const plain = course.toJSON();
+  if (plain.classes?.length) {
+    plain.classes.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+  }
+
+  return plain;
 };
 
 const createCourse = async (user, payload) => {

@@ -4,6 +4,7 @@ const authRoutes = require('../@module/auth/auth.routes');
 const adminRoutes = require('../@module/admin/admin.routes');
 const courseRoutes = require('../@module/course/course.routes');
 const classRoutes = require('../@module/class/class.routes');
+const interviewRoutes = require('../@module/interview/interview.routes');
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ router.use('/auth', authRoutes);
 router.use('/admin', adminRoutes);
 router.use('/courses', courseRoutes);
 router.use('/classes', classRoutes);
+router.use('/interview', interviewRoutes);
 
 router.get('/health', (req, res) => {
   res.status(200).json({

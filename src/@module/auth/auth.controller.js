@@ -85,11 +85,8 @@ const formatProfileUser = (user) => {
 };
 
 const validateStudentRegisterBody = (body) => {
-  const required = ['email', 'password', 'name', 'academyId'];
-  const missing = required.filter((field) => {
-    if (field === 'academyId') return !body.academyId;
-    return !body[field]?.trim?.();
-  });
+  const required = ['email', 'password', 'name'];
+  const missing = required.filter((field) => !body[field]?.trim?.());
 
   if (missing.length > 0) {
     const error = new Error(`Missing required fields: ${missing.join(', ')}`);
@@ -114,7 +111,7 @@ const registerStudent = async (req, res, next) => {
       type: USER_TYPES.STUDENT,
       name: req.body.name.trim(),
       phone: req.body.phone?.trim(),
-      academyId: Number(req.body.academyId)
+      academyId: req.body.academyId ? Number(req.body.academyId) : null
     });
 
     const tokens = await authService.issueAuthTokens(user);
