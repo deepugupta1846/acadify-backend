@@ -15,6 +15,45 @@ const { USER_TYPES } = require('../auth/auth.constants');
 const TOKEN_TTL = '4h';
 const SCREEN_SHARE_SOURCE =
   TrackSource?.SCREEN_SHARE !== undefined ? TrackSource.SCREEN_SHARE : 3;
+const SCREEN_SHARE_AUDIO_SOURCE =
+  TrackSource?.SCREEN_SHARE_AUDIO !== undefined
+    ? TrackSource.SCREEN_SHARE_AUDIO
+    : 4;
+const MICROPHONE_SOURCE =
+  TrackSource?.MICROPHONE !== undefined ? TrackSource.MICROPHONE : 2;
+const RECORDING_ENCODING = {
+  encodingOptions: EncodingOptionsPreset.H264_1080P_30
+};
+
+const normalizeTrackSource = (source) => {
+  if (typeof source === 'number') return source;
+  if (typeof source === 'string') {
+    const normalized = source.trim().toUpperCase().replace(/-/g, '_');
+    if (normalized === 'SCREEN_SHARE' || normalized === 'SCREENSHARE') {
+      return SCREEN_SHARE_SOURCE;
+    }
+    if (
+      normalized === 'SCREEN_SHARE_AUDIO' ||
+      normalized === 'SCREENSHARE_AUDIO'
+    ) {
+      return SCREEN_SHARE_AUDIO_SOURCE;
+    }
+    if (normalized === 'MICROPHONE' || normalized === 'MIC') {
+      return MICROPHONE_SOURCE;
+    }
+    if (normalized === 'CAMERA') return TrackSource?.CAMERA ?? 1;
+  }
+  return source;
+};
+
+const isScreenShareSource = (source) =>
+  normalizeTrackSource(source) === SCREEN_SHARE_SOURCE;
+
+const isScreenShareAudioSource = (source) =>
+  normalizeTrackSource(source) === SCREEN_SHARE_AUDIO_SOURCE;
+
+const isMicrophoneSource = (source) =>
+  normalizeTrackSource(source) === MICROPHONE_SOURCE;
 
 const ensureConfigured = () => {
   if (!config.url || !config.apiKey || !config.apiSecret) {
@@ -89,12 +128,124 @@ const resolveHostIdentity = async (roomName, preferredHostIdentity) => {
   return academicParticipant?.identity || null;
 };
 
-const hostIsSharingScreen = async (roomName, hostIdentity) => {
-  const roomService = getRoomService();
-  const participant = await roomService.getParticipant(roomName, hostIdentity);
-  const tracks = participant?.tracks || [];
+const hasScreenShareTrack = (participant) =>
+  (participant?.tracks || []).some(
+    (track) => isScreenShareSource(track.source) && track.sid
+  );
 
-  return tracks.some((track) => track.source === SCREEN_SHARE_SOURCE);
+const getScreenShareTracks = (participant) => {
+  const tracks = participant?.tracks || [];
+  const video = tracks.find(
+    (track) => isScreenShareSource(track.source) && track.sid
+  );
+
+  if (!video) return null;
+
+  const audio =
+    tracks.find(
+      (track) => isScreenShareAudioSource(track.source) && track.sid
+    ) ||
+    tracks.find((track) => isMicrophoneSource(track.source) && track.sid);
+
+  return {
+    videoTrackId: video.sid,
+    audioTrackId: audio?.sid || ''
+  };
+};
+
+const listRoomParticipants = async (roomName) => {
+  const roomService = getRoomService();
+  const participants = await roomService.listParticipants(roomName);
+
+  return Promise.all(
+    participants.map(async (participant) => {
+      if (!participant?.identity) return participant;
+
+      try {
+        return await roomService.getParticipant(roomName, participant.identity);
+      } catch {
+        return participant;
+      }
+    })
+  );
+};
+
+const pickScreenShareParticipant = (participants) => {
+  const candidates = participants.filter(hasScreenShareTrack);
+  if (!candidates.length) return null;
+
+  const academic = candidates.find((participant) =>
+    participant.identity?.startsWith(`${USER_TYPES.ACADEMIC}-`)
+  );
+  if (academic) return academic;
+
+  const student = candidates.find((participant) =>
+    participant.identity?.startsWith(`${USER_TYPES.STUDENT}-`)
+  );
+  if (student) return student;
+
+  return candidates[0];
+};
+
+const resolveScreenShareParticipant = async (roomName) => {
+  const participants = await listRoomParticipants(roomName);
+  const candidate = pickScreenShareParticipant(participants);
+
+  if (!candidate?.identity) return null;
+
+  const tracks = getScreenShareTracks(candidate);
+  if (!tracks) return null;
+
+  return {
+    identity: candidate.identity,
+    tracks
+  };
+};
+
+const startScreenShareRecording = async (
+  egressClient,
+  roomName,
+  output,
+  screenShare
+) => {
+  try {
+    return await egressClient.startParticipantEgress(
+      roomName,
+      screenShare.identity,
+      { file: output },
+      {
+        screenShare: true,
+        ...RECORDING_ENCODING
+      }
+    );
+  } catch {
+    return egressClient.startTrackCompositeEgress(
+      roomName,
+      { file: output },
+      {
+        videoTrackId: screenShare.tracks.videoTrackId,
+        audioTrackId: screenShare.tracks.audioTrackId,
+        ...RECORDING_ENCODING
+      }
+    );
+  }
+};
+
+const startRoomCompositeRecording = async (egressClient, roomName, output) => {
+  const options = {
+    layout: 'grid',
+    ...RECORDING_ENCODING
+  };
+
+  if (config.egressTemplateUrl) {
+    options.customBaseUrl = config.egressTemplateUrl;
+  }
+
+  return egressClient.startRoomCompositeEgress(
+    roomName,
+    { file: output },
+    options
+  );
 };
 
 const startHostRecording = async ({ roomName, classId, hostIdentity }) => {
@@ -112,23 +263,35 @@ const startHostRecording = async ({ roomName, classId, hostIdentity }) => {
 
   const { filePath, output } = buildEncodedFileOutput(classId);
   const egressClient = getEgressClient();
-  const screenShare = await hostIsSharingScreen(roomName, resolvedHostIdentity);
+  const screenShare = await resolveScreenShareParticipant(roomName);
 
-  const egress = await egressClient.startParticipantEgress(
+  if (screenShare) {
+    const egress = await startScreenShareRecording(
+      egressClient,
+      roomName,
+      output,
+      screenShare
+    );
+
+    return {
+      egressId: egress.egressId,
+      filePath,
+      hostIdentity: screenShare.identity,
+      captureMode: 'screen_share'
+    };
+  }
+
+  const egress = await startRoomCompositeRecording(
+    egressClient,
     roomName,
-    resolvedHostIdentity,
-    { file: output },
-    {
-      screenShare,
-      encodingOptions: EncodingOptionsPreset.H264_1080P_30
-    }
+    output
   );
 
   return {
     egressId: egress.egressId,
     filePath,
     hostIdentity: resolvedHostIdentity,
-    captureMode: screenShare ? 'screen_share' : 'camera'
+    captureMode: 'room_composite'
   };
 };
 
@@ -139,6 +302,13 @@ const stopRoomRecording = async (egressId) => {
   const egressClient = getEgressClient();
   return egressClient.stopEgress(egressId);
 };
+
+const updateRecordingLayout = async (egressId, layout) => {
+  const egressClient = getEgressClient();
+  return egressClient.updateLayout(egressId, layout);
+};
+
+const isScreenShareTrackSource = (source) => isScreenShareSource(source);
 
 const getEgressInfo = async (egressId) => {
   const egressClient = getEgressClient();
@@ -219,6 +389,8 @@ module.exports = {
   startHostRecording,
   startRoomRecording,
   stopRoomRecording,
+  updateRecordingLayout,
+  isScreenShareTrackSource,
   getEgressInfo,
   getConfig: () => ({
     url: config.url,

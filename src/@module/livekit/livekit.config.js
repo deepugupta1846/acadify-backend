@@ -22,5 +22,6 @@ module.exports = {
   url: resolveLiveKitUrl(),
   apiKey: process.env.LIVEKIT_API_KEY || '',
   apiSecret: process.env.LIVEKIT_API_SECRET || '',
-  webhookUrl: process.env.LIVEKIT_WEBHOOK_URL || process.env.WEBHOOK_URL || ''
+  webhookUrl: process.env.LIVEKIT_WEBHOOK_URL || process.env.WEBHOOK_URL || '',
+  egressTemplateUrl: process.env.LIVEKIT_EGRESS_TEMPLATE_URL || ''
 };

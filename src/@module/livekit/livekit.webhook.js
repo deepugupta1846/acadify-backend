@@ -1,10 +1,16 @@
 const { WebhookReceiver } = require('livekit-server-sdk');
 const config = require('./livekit.config');
+const livekitService = require('./livekit.service');
 const db = require('../../connection');
 const recordingService = require('../class/recording.service');
 const sessionService = require('../class/session.service');
 
 const receiver = new WebhookReceiver(config.apiKey, config.apiSecret);
+
+const parseClassIdFromRoom = (roomName) => {
+  const match = roomName?.match(/^acadify-class-(\d+)$/);
+  return match ? match[1] : null;
+};
 
 const handleLiveKitWebhook = async (req, res) => {
   try {
@@ -17,14 +23,40 @@ const handleLiveKitWebhook = async (req, res) => {
 
     if (event.event === 'room_finished' && event.room?.name) {
       const roomName = event.room.name;
-      const match = roomName.match(/^acadify-class-(\d+)$/);
+      const classId = parseClassIdFromRoom(roomName);
 
-      if (match) {
-        await sessionService.endSession(match[1]);
+      if (classId) {
+        await sessionService.endSession(classId);
         await db.classroom.update(
           { isLive: false, liveStartedAt: null },
-          { where: { id: match[1], livekitRoomName: roomName } }
+          { where: { id: classId, livekitRoomName: roomName } }
         );
+      }
+    }
+
+    if (
+      event.event === 'track_published' &&
+      livekitService.isScreenShareTrackSource(event.track?.source) &&
+      event.room?.name
+    ) {
+      const classId = parseClassIdFromRoom(event.room.name);
+
+      if (classId) {
+        const activeRecording = await recordingService.getActiveRecording(classId);
+
+        if (activeRecording?.egressId) {
+          try {
+            await livekitService.updateRecordingLayout(
+              activeRecording.egressId,
+              'speaker'
+            );
+          } catch (layoutError) {
+            console.error(
+              'Failed to switch recording layout for screen share:',
+              layoutError.message
+            );
+          }
+        }
       }
     }
 

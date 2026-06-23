@@ -426,6 +426,15 @@ const stopRecording = async (req, res, next) => {
   }
 };
 
+const listAcademyStudents = async (req, res, next) => {
+  try {
+    const students = await classService.listAcademyStudents(req.user);
+    return res.status(200).json({ success: true, data: students });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   listClasses,
   getClass,
@@ -449,5 +458,6 @@ module.exports = {
   getMyAttendance,
   getClassAttendance,
   startRecording,
-  stopRecording
+  stopRecording,
+  listAcademyStudents
 };
