@@ -67,7 +67,7 @@ const connectDb = async () => {
     await db.sequelize.authenticate();
     console.log('Database connection established successfully.');
 
-    // await db.sequelize.sync(isProduction ? {} : { alter: true });
+    await db.sequelize.sync(isProduction ? {} : { alter: true });
 
     const tables = Object.keys(db).filter(
       (key) => key !== 'sequelize' && key !== 'Sequelize'
