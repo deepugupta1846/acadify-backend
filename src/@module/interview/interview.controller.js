@@ -1,4 +1,5 @@
 const interviewService = require('./interview.service');
+const emailService = require('../email/email.service');
 
 const getOptions = (req, res, next) => {
   try {
@@ -13,8 +14,12 @@ const getOptions = (req, res, next) => {
 
 const startInterview = async (req, res, next) => {
   try {
-    const { role, difficulty } = req.body;
-    const data = await interviewService.startInterview({ role, difficulty });
+    const { role, difficulty, experienceLevel } = req.body;
+    const data = await interviewService.startInterview({
+      role,
+      difficulty,
+      experienceLevel,
+    });
 
     res.status(200).json({
       success: true,
@@ -41,12 +46,31 @@ const sendMessage = async (req, res, next) => {
 
 const endInterview = async (req, res, next) => {
   try {
-    const { role, difficulty, messages } = req.body;
-    const data = await interviewService.endInterview({ role, difficulty, messages });
+    const { role, difficulty, experienceLevel, messages } = req.body;
+    const data = await interviewService.endInterview({
+      role,
+      difficulty,
+      experienceLevel,
+      messages,
+    });
+
+    let emailSent = false;
+
+    if (emailService.isEmailConfigured()) {
+      try {
+        await emailService.sendInterviewFeedbackEmail(req.user, data);
+        emailSent = true;
+      } catch (emailError) {
+        console.error('Interview feedback email failed:', emailError.message);
+      }
+    }
 
     res.status(200).json({
       success: true,
-      data,
+      data: {
+        ...data,
+        emailSent,
+      },
     });
   } catch (error) {
     next(error);

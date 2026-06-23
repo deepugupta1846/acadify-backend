@@ -475,6 +475,58 @@ const listStudentClasses = async (user) => {
   });
 };
 
+const listAcademyStudents = async (user) => {
+  const academyId = ensureAcademyAccess(user);
+
+  const students = await User.findAll({
+    where: {
+      academyId,
+      type: USER_TYPES.STUDENT,
+      isActive: true
+    },
+    attributes: ['id', 'email', 'name', 'phone', 'createdAt', 'lastLoginAt'],
+    include: [
+      {
+        model: ClassEnrollment,
+        as: 'classEnrollments',
+        required: false,
+        include: [
+          {
+            model: Classroom,
+            as: 'classroom',
+            attributes: ['id', 'name', 'classCode'],
+            where: { academyId },
+            required: true
+          }
+        ]
+      }
+    ],
+    order: [
+      ['name', 'ASC'],
+      [{ model: ClassEnrollment, as: 'classEnrollments' }, 'createdAt', 'DESC']
+    ]
+  });
+
+  return students.map((student) => {
+    const plain = student.toJSON();
+
+    return {
+      id: plain.id,
+      name: plain.name,
+      email: plain.email,
+      phone: plain.phone,
+      joinedAcademyAt: plain.createdAt,
+      lastLoginAt: plain.lastLoginAt,
+      classes: (plain.classEnrollments || []).map((enrollment) => ({
+        id: enrollment.classroom.id,
+        name: enrollment.classroom.name,
+        classCode: enrollment.classroom.classCode,
+        joinedAt: enrollment.createdAt
+      }))
+    };
+  });
+};
+
 module.exports = {
   listClasses,
   getClassById,
@@ -486,5 +538,6 @@ module.exports = {
   deleteClass,
   joinClassByCode,
   getEnrolledClassById,
-  listStudentClasses
+  listStudentClasses,
+  listAcademyStudents
 };

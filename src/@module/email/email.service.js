@@ -336,6 +336,64 @@ const sendLiveClassStartedEmailsToStudents = async (classroom, students) => {
   return { sent, failed, errors };
 };
 
+const listHtml = (items) => {
+  if (!items?.length) {
+    return '<p style="margin:0;color:#6b7280;">—</p>';
+  }
+
+  return `<ul style="margin:0;padding-left:20px;line-height:1.8;">${items
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join('')}</ul>`;
+};
+
+const sendInterviewFeedbackEmail = async (
+  user,
+  { role, difficulty, experienceLevel, feedback }
+) => {
+  const practiceUrl = `${emailConfig.appUrl}/interview`;
+  const score = feedback?.score ?? '—';
+
+  const bodyHtml = `
+    <p>Hello ${escapeHtml(user.name)},</p>
+    <p>Thank you for completing your AI mock interview on Acadify. Below is your personalized feedback report.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+      <tr>
+        <td style="padding:16px 18px;font-size:14px;line-height:1.8;">
+          <strong>Role:</strong> ${escapeHtml(role)}<br />
+          <strong>Difficulty:</strong> ${escapeHtml(difficulty)}<br />
+          <strong>Experience:</strong> ${escapeHtml(experienceLevel || 'Fresher')}<br />
+          <strong>Score:</strong> ${escapeHtml(String(score))}/10<br />
+          <strong>Completed:</strong> ${escapeHtml(new Date().toLocaleString())}
+        </td>
+      </tr>
+    </table>
+    <h3 style="margin:24px 0 8px;font-size:16px;color:#1f2937;">Overall assessment</h3>
+    <p style="margin:0;">${escapeHtml(feedback?.summary || '')}</p>
+    <h3 style="margin:24px 0 8px;font-size:16px;color:#1f8354;">Strengths</h3>
+    ${listHtml(feedback?.strengths)}
+    <h3 style="margin:24px 0 8px;font-size:16px;color:#0056d2;">Areas to improve</h3>
+    ${listHtml(feedback?.improvements)}
+    <h3 style="margin:24px 0 8px;font-size:16px;color:#1f2937;">Tips for next time</h3>
+    ${listHtml(feedback?.tips)}
+    <p style="margin-top:28px;">Keep practicing to build confidence before your real interview.</p>
+    <p style="margin-top:24px;">
+      <a href="${escapeHtml(practiceUrl)}" style="display:inline-block;background:#0056d2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">
+        Practice again
+      </a>
+    </p>
+  `;
+
+  const textLists = (label, items) =>
+    items?.length ? `\n${label}:\n${items.map((item) => `- ${item}`).join('\n')}` : '';
+
+  return sendEmail({
+    to: user.email,
+    subject: `Your Acadify interview feedback — ${role}`,
+    html: layout({ title: 'Interview feedback report', bodyHtml }),
+    text: `Hello ${user.name},\n\nThank you for completing your AI mock interview on Acadify.\n\nRole: ${role}\nDifficulty: ${difficulty}\nExperience: ${experienceLevel || 'Fresher'}\nScore: ${score}/10\n\nOverall assessment:\n${feedback?.summary || ''}${textLists('Strengths', feedback?.strengths)}${textLists('Areas to improve', feedback?.improvements)}${textLists('Tips for next time', feedback?.tips)}\n\nPractice again: ${practiceUrl}`
+  });
+};
+
 module.exports = {
   sendEmail,
   sendAcademyRegistrationPendingEmail,
@@ -344,5 +402,6 @@ module.exports = {
   sendAcademyCredentialsEmail,
   sendPasswordResetOtpEmail,
   sendLiveClassStartedEmailsToStudents,
+  sendInterviewFeedbackEmail,
   isEmailConfigured: emailConfig.isConfigured
 };

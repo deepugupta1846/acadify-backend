@@ -72,6 +72,7 @@ router.get(
 router.use(authenticate, authorize(USER_TYPES.ACADEMIC));
 
 router.get('/', classController.listClasses);
+router.get('/students', classController.listAcademyStudents);
 router.post('/', classController.createClass);
 router.get('/:id', classController.getClass);
 router.put('/:id', classController.updateClass);
