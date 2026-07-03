@@ -27,6 +27,22 @@ db.courseContent = require('../@module/course/course-content.model')(
   sequelize,
   DataTypes
 );
+db.academyContest = require('../@module/academy-contest/academy-contest.model')(
+  sequelize,
+  DataTypes
+);
+db.academyContestQuestion = require('../@module/academy-contest/academy-contest-question.model')(
+  sequelize,
+  DataTypes
+);
+db.academyContestAttempt = require('../@module/academy-contest/academy-contest-attempt.model')(
+  sequelize,
+  DataTypes
+);
+db.academyContestAnswer = require('../@module/academy-contest/academy-contest-answer.model')(
+  sequelize,
+  DataTypes
+);
 db.classroom = require('../@module/class/class.model')(sequelize, DataTypes);
 db.classEnrollment = require('../@module/class/class-enrollment.model')(
   sequelize,
@@ -195,5 +211,68 @@ db.user.hasMany(db.passwordResetOtp, {
   as: 'passwordResetOtps'
 });
 db.passwordResetOtp.belongsTo(db.user, { foreignKey: 'user_id', as: 'user' });
+
+db.academy.hasMany(db.academyContest, {
+  foreignKey: 'academy_id',
+  as: 'academyContests'
+});
+db.academyContest.belongsTo(db.academy, {
+  foreignKey: 'academy_id',
+  as: 'academy'
+});
+
+db.user.hasMany(db.academyContest, {
+  foreignKey: 'created_by',
+  as: 'createdAcademyContests'
+});
+db.academyContest.belongsTo(db.user, {
+  foreignKey: 'created_by',
+  as: 'creator'
+});
+
+db.academyContest.hasMany(db.academyContestQuestion, {
+  foreignKey: 'contest_id',
+  as: 'questions'
+});
+db.academyContestQuestion.belongsTo(db.academyContest, {
+  foreignKey: 'contest_id',
+  as: 'contest'
+});
+
+db.academyContest.hasMany(db.academyContestAttempt, {
+  foreignKey: 'contest_id',
+  as: 'attempts'
+});
+db.academyContestAttempt.belongsTo(db.academyContest, {
+  foreignKey: 'contest_id',
+  as: 'contest'
+});
+
+db.user.hasMany(db.academyContestAttempt, {
+  foreignKey: 'student_id',
+  as: 'academyContestAttempts'
+});
+db.academyContestAttempt.belongsTo(db.user, {
+  foreignKey: 'student_id',
+  as: 'student'
+});
+
+db.academyContestAttempt.hasMany(db.academyContestAnswer, {
+  foreignKey: 'attempt_id',
+  as: 'answers'
+});
+db.academyContestAnswer.belongsTo(db.academyContestAttempt, {
+  foreignKey: 'attempt_id',
+  as: 'attempt'
+});
+
+db.academyContestQuestion.hasMany(db.academyContestAnswer, {
+  foreignKey: 'question_id',
+  as: 'answers'
+});
+db.academyContestAnswer.belongsTo(db.academyContestQuestion, {
+  foreignKey: 'question_id',
+  as: 'question'
+});
 
 module.exports = db;

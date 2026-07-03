@@ -6,6 +6,9 @@ require('dotenv').config();
 const db = require('./src/connection');
 const apiRoutes = require('./src/routes');
 const { handleLiveKitWebhook } = require('./src/@module/livekit/livekit.webhook');
+const {
+  startAcademyContestScheduler
+} = require('./src/@module/academy-contest/academy-contest.scheduler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -81,6 +84,7 @@ const connectDb = async () => {
 
 const startServer = async () => {
   await connectDb();
+  startAcademyContestScheduler();
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
