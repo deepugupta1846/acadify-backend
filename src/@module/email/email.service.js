@@ -300,6 +300,117 @@ const sendPasswordResetOtpEmail = async (user, otp, expiresInMinutes = 10) => {
   });
 };
 
+const formatContestDateTime = (value) =>
+  new Date(value).toLocaleString(undefined, {
+    dateStyle: 'full',
+    timeStyle: 'short'
+  });
+
+const sendAcademyContestScheduledEmail = async (student, contest) => {
+  const contestUrl = `${emailConfig.appUrl}/student/contests/${contest.id}`;
+  const loginUrl = `${emailConfig.appUrl}/login?redirect=/student/contests/${contest.id}`;
+
+  const bodyHtml = `
+    <p>Hello ${escapeHtml(student.name)},</p>
+    <p>Your academy has scheduled a new contest on Acadify.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;">
+      <tr>
+        <td style="padding:16px 18px;font-size:14px;line-height:1.8;">
+          <strong>Contest:</strong> ${escapeHtml(contest.title)}<br />
+          <strong>Starts:</strong> ${escapeHtml(formatContestDateTime(contest.startAt))}<br />
+          <strong>Duration:</strong> ${escapeHtml(String(contest.durationMinutes))} minutes<br />
+          <strong>Ends:</strong> ${escapeHtml(formatContestDateTime(contest.endAt))}
+        </td>
+      </tr>
+    </table>
+    <p>The contest will open automatically at the scheduled start time. Your answers will be auto-submitted when time runs out.</p>
+    <p style="margin-top:24px;">
+      <a href="${escapeHtml(contestUrl)}" style="display:inline-block;background:#0056d2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">
+        View contest
+      </a>
+    </p>
+    <p style="margin-top:16px;font-size:14px;color:#6b7280;">
+      If you are not signed in yet, <a href="${escapeHtml(loginUrl)}">log in here</a> first.
+    </p>
+  `;
+
+  return sendEmail({
+    to: student.email,
+    subject: `New contest scheduled: ${contest.title}`,
+    html: layout({ title: 'Contest scheduled', bodyHtml }),
+    text: `Hello ${student.name},\n\nYour academy scheduled "${contest.title}".\n\nStarts: ${formatContestDateTime(contest.startAt)}\nDuration: ${contest.durationMinutes} minutes\nEnds: ${formatContestDateTime(contest.endAt)}\n\nOpen: ${contestUrl}`
+  });
+};
+
+const sendAcademyContestLiveEmail = async (student, contest) => {
+  const contestUrl = `${emailConfig.appUrl}/student/contests/${contest.id}`;
+  const loginUrl = `${emailConfig.appUrl}/login?redirect=/student/contests/${contest.id}`;
+
+  const bodyHtml = `
+    <p>Hello ${escapeHtml(student.name)},</p>
+    <p>The contest <strong>${escapeHtml(contest.title)}</strong> is now live.</p>
+    <p>Join now — your attempt will auto-submit when the contest duration ends.</p>
+    <p style="margin-top:24px;">
+      <a href="${escapeHtml(contestUrl)}" style="display:inline-block;background:#0056d2;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">
+        Start contest
+      </a>
+    </p>
+    <p style="margin-top:16px;font-size:14px;color:#6b7280;">
+      If you are not signed in yet, <a href="${escapeHtml(loginUrl)}">log in here</a> first.
+    </p>
+  `;
+
+  return sendEmail({
+    to: student.email,
+    subject: `Contest is live: ${contest.title}`,
+    html: layout({ title: 'Contest is live', bodyHtml }),
+    text: `Hello ${student.name},\n\n"${contest.title}" is now live.\n\nStart: ${contestUrl}`
+  });
+};
+
+const sendBatchStudentEmails = async (students, sendFn) => {
+  if (!students?.length) {
+    return { sent: 0, failed: 0, errors: [] };
+  }
+
+  if (!emailConfig.isConfigured()) {
+    return {
+      sent: 0,
+      failed: students.length,
+      errors: ['Email service is not configured']
+    };
+  }
+
+  const results = await Promise.allSettled(students.map(sendFn));
+  const errors = [];
+  let sent = 0;
+  let failed = 0;
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      sent += 1;
+      return;
+    }
+
+    failed += 1;
+    errors.push(
+      `${students[index].email}: ${result.reason?.message || 'Failed to send email'}`
+    );
+  });
+
+  return { sent, failed, errors };
+};
+
+const sendAcademyContestScheduledEmailsToStudents = async (contest, students) =>
+  sendBatchStudentEmails(students, (student) =>
+    sendAcademyContestScheduledEmail(student, contest)
+  );
+
+const sendAcademyContestLiveEmailsToStudents = async (contest, students) =>
+  sendBatchStudentEmails(students, (student) =>
+    sendAcademyContestLiveEmail(student, contest)
+  );
+
 const sendLiveClassStartedEmailsToStudents = async (classroom, students) => {
   if (!students?.length) {
     return { sent: 0, failed: 0, errors: [] };
@@ -402,6 +513,8 @@ module.exports = {
   sendAcademyCredentialsEmail,
   sendPasswordResetOtpEmail,
   sendLiveClassStartedEmailsToStudents,
+  sendAcademyContestScheduledEmailsToStudents,
+  sendAcademyContestLiveEmailsToStudents,
   sendInterviewFeedbackEmail,
   isEmailConfigured: emailConfig.isConfigured
 };
